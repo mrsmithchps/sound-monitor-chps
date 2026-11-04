@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shhh! Ruffles &amp; Wispa Are Sleeping — Classroom Volume Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-state="sleeping">
+  <!-- Decorative Classroom Bunting -->
+  <div class="bunting" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <div class="app-shell">
+    <!-- Top Chalkboard Header -->
+    <header class="chalkboard-header">
+      <div class="header-left">
+        <button id="meetDogsBtn" class="polaroid-duo" title="Click to see Ruffles &amp; Wispa's real photos!">
+          <div class="mini-polaroid tilt-left">
+            <img src="assets/ruffles_photo.png" alt="Photo of Ruffles, a black puppy" />
+            <span>Ruffles</span>
+          </div>
+          <div class="mini-polaroid tilt-right">
+            <img src="assets/wispa_photo.png" alt="Photo of Wispa, a brown puppy" />
+            <span>Wispa</span>
+          </div>
+        </button>
+        <div class="title-group">
+          <div class="eyebrow">Classroom Noise Monitor</div>
+          <h1 id="statusHeadline">Shhh… Ruffles &amp; Wispa are fast asleep!</h1>
+          <p id="statusSubtext">Keep our classroom voices calm so the puppies can dream.</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Classroom Stats Pills -->
+        <div class="stats-bar">
+          <div class="stat-pill stat-streak" title="Current quiet streak">
+            <span class="stat-icon">🌙</span>
+            <div>
+              <span class="stat-label">Quiet Time</span>
+              <strong id="quietTimer">00:00</strong>
+            </div>
+          </div>
+          <div class="stat-pill stat-treats" title="Dream Treats earned (1 every 2 mins of quiet!)">
+            <span class="stat-icon">🦴</span>
+            <div>
+              <span class="stat-label">Dream Treats</span>
+              <strong id="treatCount">0</strong>
+            </div>
+          </div>
+          <div class="stat-pill stat-wakeups" title="Number of times the class woke the dogs">
+            <span class="stat-icon">🔔</span>
+            <div>
+              <span class="stat-label">Wake-Ups</span>
+              <strong id="wakeupCount">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="top-buttons">
+          <button id="micToggleBtn" class="btn btn-primary btn-lg">
+            <span class="btn-icon" id="micBtnIcon">🎙️</span>
+            <span id="micBtnLabel">Start Listening</span>
+          </button>
+          <button id="settingsToggleBtn" class="btn btn-chalk" title="Teacher Controls" aria-expanded="false">
+            ⚙️ <span class="hide-sm">Settings</span>
+          </button>
+          <button id="fullscreenBtn" class="btn btn-chalk" title="Toggle Fullscreen for Whiteboard">
+            ⛶
+          </button>
+        </div>
+      </div>
+      <div class="chalk-ledge" aria-hidden="true">
+        <span class="chalk-piece white"></span>
+        <span class="chalk-piece yellow"></span>
+        <span class="chalk-piece pink"></span>
+        <span class="chalk-duster"></span>
+      </div>
+    </header>
+
+    <!-- Main Classroom Stage -->
+    <main class="classroom-stage">
+      <!-- Left / Center: Illustrated Dog Scene -->
+      <section class="scene-card" aria-live="polite">
+        <div class="scene-viewport" id="sceneViewport">
+          <!-- Crossfading scene layers -->
+          <img
+            src="assets/dogs_sleeping.jpg"
+            alt="Ruffles and Wispa sleeping peacefully in the classroom"
+            class="scene-img layer-sleeping active"
+            id="imgSleeping"
+          />
+          <img
+            src="assets/dogs_stirring.jpg"
+            alt="Ruffles and Wispa waking up slightly with ears perked"
+            class="scene-img layer-stirring"
+            id="imgStirring"
+          />
+          <img
+            src="assets/dogs_awake.jpg"
+            alt="Ruffles and Wispa wide awake and barking because it is too loud"
+            class="scene-img layer-awake"
+            id="imgAwake"
+          />
+
+          <!-- Floating Zzzs when sleeping -->
+          <div class="zzz-container zzz-ruffles" id="zzzRuffles" aria-hidden="true">
+            <span class="zzz z1">Z</span>
+            <span class="zzz z2">z</span>
+            <span class="zzz z3">z</span>
+          </div>
+          <div class="zzz-container zzz-wispa" id="zzzWispa" aria-hidden="true">
+            <span class="zzz z1">Z</span>
+            <span class="zzz z2">z</span>
+            <span class="zzz z3">z</span>
+          </div>
+
+          <!-- Stirring Question Marks / Ear Perks -->
+          <div class="stir-bubble bubble-ruffles" aria-hidden="true">👂 Hmm?</div>
+          <div class="stir-bubble bubble-wispa" aria-hidden="true">🐾 Shhh…</div>
+
+          <!-- Awake Woof Speech Bubbles -->
+          <div class="woof-bubble bubble-ruffles" aria-hidden="true">WOOF! Too loud! 🐾</div>
+          <div class="woof-bubble bubble-wispa" aria-hidden="true">ARF! ARF! 🐶</div>
+
+          <!-- Too Noisy Big Alert Banner Overlay -->
+          <div class="noisy-banner" id="noisyBanner" role="alert">
+            <span class="noisy-emoji">🚨🐶</span>
+            <div class="noisy-text">
+              <strong>Uh oh! Too Noisy!</strong>
+              <span>You woke up Ruffles &amp; Wispa — let's whisper so they can sleep again!</span>
+            </div>
+          </div>
+
+          <!-- Dog Name Tags at Bottom of Scene -->
+          <div class="dog-nametag tag-ruffles">
+            <img src="assets/ruffles_photo.png" alt="" class="nametag-avatar" />
+            <div>
+              <strong>Ruffles</strong>
+              <span class="dog-status-pill" id="rufflesStatus">💤 Dreaming</span>
+            </div>
+          </div>
+
+          <div class="dog-nametag tag-wispa">
+            <img src="assets/wispa_photo.png" alt="" class="nametag-avatar" />
+            <div>
+              <strong>Wispa</strong>
+              <span class="dog-status-pill" id="wispaStatus">💤 Snoozing</span>
+            </div>
+          </div>
+
+          <!-- Idle / Mic Prompt Overlay before starting -->
+          <div class="start-overlay" id="startOverlay">
+            <div class="start-card">
+              <div class="start-avatars">
+                <img src="assets/ruffles_photo.png" alt="Ruffles" />
+                <img src="assets/wispa_photo.png" alt="Wispa" />
+              </div>
+              <h2>Ready to Help Ruffles &amp; Wispa Nap?</h2>
+              <p>Click below to turn on the classroom microphone. If our voices stay gentle, Ruffles and Wispa stay fast asleep!</p>
+              <div class="start-actions">
+                <button id="heroStartBtn" class="btn btn-primary btn-xl">
+                  🎙️ Start Classroom Monitor
+                </button>
+                <button id="heroDemoBtn" class="btn btn-secondary">
+                  🎚️ Try Demo Slider First
+                </button>
+              </div>
+              <p class="privacy-note">🔒 Audio is measured live in your browser and is never recorded or sent anywhere.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Classroom Sound-O-Meter -->
+      <aside class="meter-panel" aria-label="Classroom Volume Meter">
+        <div class="meter-header">
+          <h2>Noise Meter</h2>
+          <span class="level-readout" id="levelReadout">0%</span>
+        </div>
+
+        <!-- Activity Mode Quick Presets -->
+        <div class="mode-presets" role="group" aria-label="Classroom Activity Mode">
+          <button class="preset-chip" data-threshold="30" title="Wake-up threshold: 30%">🤫 Silent Reading</button>
+          <button class="preset-chip active" data-threshold="50" title="Wake-up threshold: 50%">🗣️ Partner Whisper</button>
+          <button class="preset-chip" data-threshold="68" title="Wake-up threshold: 68%">🧩 Group Work</button>
+          <button class="preset-chip" data-threshold="82" title="Wake-up threshold: 82%">🎨 Busy Makers</button>
+        </div>
+
+        <!-- Vertical Thermometer / Volume Bar -->
+        <div class="thermometer-wrap">
+          <div class="zone-labels" aria-hidden="true">
+            <span class="z-loud">🐶 Wake Up!</span>
+            <span class="z-stir">👂 Stirring</span>
+            <span class="z-quiet">💤 Sleeping</span>
+          </div>
+
+          <div class="meter-track" id="meterTrack" title="Click or drag to move the Wake-Up Line">
+            <!-- Colored Background Zones -->
+            <div class="meter-zone-bg" id="meterZoneBg"></div>
+            <!-- Live Volume Fill -->
+            <div class="meter-fill" id="meterFill"></div>
+            <!-- Sustained Trigger Progress Ring / Bar near threshold -->
+            <div class="wake-progress-bar" id="wakeProgressBar" title="Sustained loud noise progress"></div>
+
+            <!-- Draggable Threshold Line -->
+            <div class="threshold-marker" id="thresholdMarker" style="bottom: 50%;" role="slider" tabindex="0"
+                 aria-label="Wake-up volume threshold" aria-valuemin="15" aria-valuemax="95" aria-valuenow="50">
+              <span class="threshold-flag">🔔 Wake Line (<span id="thresholdValText">50</span>%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demo / Manual Volume Test Slider (shown when in Demo mode or toggled) -->
+        <div class="demo-box" id="demoBox" hidden>
+          <div class="demo-box-header">
+            <label for="demoVolumeSlider">🎚️ Test Volume Slider</label>
+            <span class="badge-demo">Demo Mode</span>
+          </div>
+          <input type="range" id="demoVolumeSlider" min="0" max="100" value="18" />
+        </div>
+
+        <!-- Quick Teacher Action Row -->
+        <div class="meter-footer">
+          <button id="testAlertBtn" class="btn btn-outline-warm btn-sm" title="Preview what happens when it's too loud">
+            🐕 Test Wake-Up
+          </button>
+          <button id="resetStatsBtn" class="btn btn-outline-warm btn-sm" title="Reset timer and counters">
+            ↺ Reset Count
+          </button>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Collapsible Teacher Settings Drawer -->
+    <section class="settings-drawer" id="settingsDrawer" hidden>
+      <div class="settings-grid">
+        <div class="setting-group">
+          <label for="sensitivitySlider">
+            🎙️ Mic Sensitivity <span id="sensitivityLabel">1.0× (Normal)</span>
+          </label>
+          <input type="range" id="sensitivitySlider" min="0.3" max="2.5" step="0.1" value="1.0" />
+          <small>Increase if the mic is far from students; lower if it sits near a fan or speaker.</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="thresholdSlider">
+            🔔 Wake-Up Threshold <span id="thresholdSliderLabel">50%</span>
+          </label>
+          <input type="range" id="thresholdSlider" min="15" max="95" step="1" value="50" />
+          <small>You can also drag the red Wake Line directly on the Noise Meter.</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="holdTimeSelect">⏱️ Brief Noise Forgiveness</label>
+          <select id="holdTimeSelect">
+            <option value="400">Instant (0.4 sec) — Strict</option>
+            <option value="1200" selected>Balanced (1.2 sec) — Ignores coughs/drops</option>
+            <option value="2500">Gentle (2.5 sec) — Sustained chatter only</option>
+          </select>
+          <small>Prevents a dropped pencil or sneeze from waking Ruffles &amp; Wispa.</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="alertSoundSelect">🔊 Wake-Up Alert Sound</label>
+          <select id="alertSoundSelect">
+            <option value="bark-chime" selected>🐶 Playful Puppy Bark + Classroom Chime</option>
+            <option value="voice-bark">🗣️ Spoken Alert + Puppy Bark ("Uh oh! Too noisy!")</option>
+            <option value="bell">🔔 Gentle Teacher Desk Bell Only</option>
+            <option value="shush">🤫 Friendly "Shhh…" + Soft Chime</option>
+            <option value="silent">🔇 Visual Alert Only (Silent)</option>
+          </select>
+          <small>Plays when Ruffles &amp; Wispa wake up (with a cooldown so it doesn't spam).</small>
+        </div>
+      </div>
+
+      <div class="settings-bottom-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="toggleDemoMode" />
+          Use Manual Demo Slider instead of Microphone
+        </label>
+        <button id="closeSettingsBtn" class="btn btn-secondary btn-sm">Done ✓</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- "Meet Ruffles & Wispa" Real Photo Modal -->
+  <div class="modal-backdrop" id="photoModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="closeModalBtn" aria-label="Close">✕</button>
+      <h2 id="modalTitle">🐾 Meet Our Classroom Puppies!</h2>
+      <p class="modal-subtitle">Ruffles and Wispa love visiting a calm, focused classroom.</p>
+      <div class="dog-profiles">
+        <div class="dog-profile-card">
+          <div class="polaroid-large tilt-left">
+            <img src="assets/ruffles_photo.png" alt="Real photo of Ruffles" />
+          </div>
+          <h3>Ruffles</h3>
+          <p>Fluffy black coat with a snowy white chin! Loves cozy naps during quiet reading time.</p>
+        </div>
+        <div class="dog-profile-card">
+          <div class="polaroid-large tilt-right">
+            <img src="assets/wispa_photo.png" alt="Real photo of Wispa" />
+          </div>
+          <h3>Wispa</h3>
+          <p>Golden-brown curls and floppy ears! Perks right up if the classroom gets too loud.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
