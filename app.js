@@ -1,15 +1,61 @@
 /**
- * Ruffles & Wispa Classroom Volume Monitor
- * Real-time Web Audio microphone monitor + synthesized classroom alerts
+ * Classroom Volume Monitor — Ruffles, Wispa & Rogan
+ * Real-time Web Audio microphone monitor, dog selector, and hideable noise meter
  */
 
 (function () {
   'use strict';
 
+  // --- Dog Catalogue (canonical order) ---
+  const DOG_ORDER = ['ruffles', 'wispa', 'rogan'];
+
+  const DOGS = {
+    ruffles: {
+      id: 'ruffles',
+      name: 'Ruffles',
+      photo: 'assets/ruffles_photo.png',
+      barkPitch: 1.0,
+      pronoun: 'he',
+      bio: 'Fluffy black coat with a snowy white chin! Loves cozy naps during quiet reading time.',
+      stirBubble: '👂 Hmm?',
+      woofBubble: 'WOOF! Too loud! 🐾',
+      sleepStatus: '💤 Dreaming',
+      stirStatus: '👂 Ears Perked',
+      awakeStatus: '🐶 WOOF! Awake!',
+    },
+    wispa: {
+      id: 'wispa',
+      name: 'Wispa',
+      photo: 'assets/wispa_photo.png',
+      barkPitch: 1.25,
+      pronoun: 'she',
+      bio: 'Golden-brown curls and floppy ears! Perks right up if the classroom gets too loud.',
+      stirBubble: '🐾 Shhh…',
+      woofBubble: 'ARF! ARF! 🐶',
+      sleepStatus: '💤 Snoozing',
+      stirStatus: '👀 Peeking',
+      awakeStatus: '🐶 ARF! Awake!',
+    },
+    rogan: {
+      id: 'rogan',
+      name: 'Rogan',
+      photo: 'assets/rogan_photo.png',
+      barkPitch: 0.84,
+      pronoun: 'he',
+      bio: 'Curly taupe coat with a sandy teddy-bear nose! Loves calm, focused classroom work.',
+      stirBubble: '👂 Too chatty?',
+      woofBubble: 'RUFF! Quiet please! 🐾',
+      sleepStatus: '💤 Napping',
+      stirStatus: '👂 Listening',
+      awakeStatus: '🐶 RUFF! Awake!',
+    },
+  };
+
   // --- DOM Elements ---
   const body = document.body;
   const statusHeadline = document.getElementById('statusHeadline');
   const statusSubtext = document.getElementById('statusSubtext');
+  const noisyBannerSubtext = document.getElementById('noisyBannerSubtext');
   const quietTimerEl = document.getElementById('quietTimer');
   const treatCountEl = document.getElementById('treatCount');
   const wakeupCountEl = document.getElementById('wakeupCount');
@@ -17,6 +63,14 @@
   const micToggleBtn = document.getElementById('micToggleBtn');
   const micBtnIcon = document.getElementById('micBtnIcon');
   const micBtnLabel = document.getElementById('micBtnLabel');
+
+  const meterVisibilityBtn = document.getElementById('meterVisibilityBtn');
+  const meterVisIcon = document.getElementById('meterVisIcon');
+  const meterVisLabel = document.getElementById('meterVisLabel');
+  const quickHideMeterBtn = document.getElementById('quickHideMeterBtn');
+  const heroHideMeterCheck = document.getElementById('heroHideMeterCheck');
+  const settingsHideMeterCheck = document.getElementById('settingsHideMeterCheck');
+
   const heroStartBtn = document.getElementById('heroStartBtn');
   const heroDemoBtn = document.getElementById('heroDemoBtn');
   const startOverlay = document.getElementById('startOverlay');
@@ -24,8 +78,15 @@
   const imgSleeping = document.getElementById('imgSleeping');
   const imgStirring = document.getElementById('imgStirring');
   const imgAwake = document.getElementById('imgAwake');
-  const rufflesStatus = document.getElementById('rufflesStatus');
-  const wispaStatus = document.getElementById('wispaStatus');
+  const dogSceneOverlays = document.getElementById('dogSceneOverlays');
+  const dogNametagsRow = document.getElementById('dogNametagsRow');
+
+  const heroDogPicker = document.getElementById('heroDogPicker');
+  const settingsDogPicker = document.getElementById('settingsDogPicker');
+  const meetDogsBtn = document.getElementById('meetDogsBtn');
+  const photoModal = document.getElementById('photoModal');
+  const modalDogProfiles = document.getElementById('modalDogProfiles');
+  const closeModalBtn = document.getElementById('closeModalBtn');
 
   const levelReadout = document.getElementById('levelReadout');
   const meterTrack = document.getElementById('meterTrack');
@@ -42,6 +103,9 @@
 
   const testAlertBtn = document.getElementById('testAlertBtn');
   const resetStatsBtn = document.getElementById('resetStatsBtn');
+  const settingsTestAlertBtn = document.getElementById('settingsTestAlertBtn');
+  const settingsResetBtn = document.getElementById('settingsResetBtn');
+
   const settingsToggleBtn = document.getElementById('settingsToggleBtn');
   const settingsDrawer = document.getElementById('settingsDrawer');
   const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -54,20 +118,23 @@
   const holdTimeSelect = document.getElementById('holdTimeSelect');
   const alertSoundSelect = document.getElementById('alertSoundSelect');
 
-  const meetDogsBtn = document.getElementById('meetDogsBtn');
-  const photoModal = document.getElementById('photoModal');
-  const closeModalBtn = document.getElementById('closeModalBtn');
-
   // --- App State & Saved Preferences ---
-  const STORAGE_KEY = 'ruffles_wispa_monitor_v1';
+  const STORAGE_KEY = 'chps_dog_monitor_v2';
   const savedPrefs = loadPrefs();
+
+  const initialDogs = Array.isArray(savedPrefs.selectedDogs)
+    ? DOG_ORDER.filter((id) => savedPrefs.selectedDogs.includes(id))
+    : ['ruffles', 'wispa', 'rogan'];
 
   const state = {
     isRunning: false,
     isDemoMode: false,
     dogState: 'sleeping', // 'sleeping' | 'stirring' | 'awake'
 
-    currentVolume: 0, // 0..100 smoothed
+    selectedDogs: initialDogs.length > 0 ? initialDogs : ['ruffles', 'wispa', 'rogan'],
+    hideMeter: Boolean(savedPrefs.hideMeter ?? false),
+
+    currentVolume: 0,
     threshold: savedPrefs.threshold ?? 50,
     sensitivity: savedPrefs.sensitivity ?? 1.0,
     holdDurationMs: savedPrefs.holdDurationMs ?? 1200,
@@ -76,7 +143,7 @@
     overThresholdMs: 0,
     awakeHoldUntil: 0,
     lastAlertPlayedAt: 0,
-    alertPlaybackGuardUntil: 0, // Prevents speaker audio from re-triggering mic
+    alertPlaybackGuardUntil: 0,
 
     quietSeconds: 0,
     quietAccumMs: 0,
@@ -106,6 +173,8 @@
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          selectedDogs: state.selectedDogs,
+          hideMeter: state.hideMeter,
           threshold: state.threshold,
           sensitivity: state.sensitivity,
           holdDurationMs: state.holdDurationMs,
@@ -115,14 +184,185 @@
     } catch (_) {}
   }
 
-  // --- Initialize UI from State ---
+  // --- Helpers for Active Dogs & Copy ---
+  function getActiveDogs() {
+    return DOG_ORDER.filter((id) => state.selectedDogs.includes(id)).map((id) => DOGS[id]);
+  }
+
+  function formatDogNames(dogs) {
+    const names = dogs.map((d) => d.name);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} & ${names[1]}`;
+    return `${names[0]}, ${names[1]} & ${names[2]}`;
+  }
+
+  function toggleDogSelection(dogId) {
+    const idx = state.selectedDogs.indexOf(dogId);
+    if (idx !== -1) {
+      // Keep at least one dog active
+      if (state.selectedDogs.length <= 1) return;
+      state.selectedDogs = state.selectedDogs.filter((id) => id !== dogId);
+    } else {
+      state.selectedDogs = DOG_ORDER.filter(
+        (id) => state.selectedDogs.includes(id) || id === dogId
+      );
+    }
+    savePrefs();
+    renderAllDogUI();
+  }
+
+  // --- Render Dog Pickers, Scene Images, Polaroids, Overlays & Copy ---
+  function renderAllDogUI() {
+    const activeDogs = getActiveDogs();
+    const comboKey = activeDogs.map((d) => d.id).join('_');
+
+    // Update crossfading scene image sources
+    imgSleeping.src = `assets/scenes/${comboKey}_sleeping.jpg`;
+    imgStirring.src = `assets/scenes/${comboKey}_stirring.jpg`;
+    imgAwake.src = `assets/scenes/${comboKey}_awake.jpg`;
+
+    const namesStr = formatDogNames(activeDogs);
+    imgSleeping.alt = `${namesStr} sleeping peacefully in the classroom`;
+    imgStirring.alt = `${namesStr} starting to stir in the classroom`;
+    imgAwake.alt = `${namesStr} wide awake and barking in the classroom`;
+
+    // Top-left Chalkboard Mini Polaroids
+    meetDogsBtn.innerHTML = activeDogs
+      .map(
+        (dog, i) => `
+        <div class="mini-polaroid tilt-${i}">
+          <img src="${dog.photo}" alt="Photo of ${dog.name}" />
+          <span>${dog.name}</span>
+        </div>`
+      )
+      .join('');
+
+    // Scene Overlays (Zzzs + Stir Bubbles + Woof Bubbles)
+    const count = activeDogs.length;
+    dogSceneOverlays.innerHTML = activeDogs
+      .map(
+        (dog, i) => `
+        <div class="zzz-container slot-${count}-${i}">
+          <span class="zzz z1" style="animation-delay: ${(i * 0.45).toFixed(2)}s">Z</span>
+          <span class="zzz z2" style="animation-delay: ${(1.1 + i * 0.45).toFixed(2)}s">z</span>
+          <span class="zzz z3" style="animation-delay: ${(2.2 + i * 0.45).toFixed(2)}s">z</span>
+        </div>
+        <div class="stir-bubble slot-${count}-${i}">${dog.stirBubble}</div>
+        <div class="woof-bubble slot-${count}-${i}">${dog.woofBubble}</div>`
+      )
+      .join('');
+
+    // Bottom Scene Dog Name Tags
+    dogNametagsRow.innerHTML = activeDogs
+      .map((dog) => {
+        const statusText =
+          state.dogState === 'awake'
+            ? dog.awakeStatus
+            : state.dogState === 'stirring'
+              ? dog.stirStatus
+              : dog.sleepStatus;
+        return `
+          <div class="dog-nametag">
+            <img src="${dog.photo}" alt="" class="nametag-avatar" />
+            <div>
+              <strong>${dog.name}</strong>
+              <span class="dog-status-pill" data-dog-status="${dog.id}">${statusText}</span>
+            </div>
+          </div>`;
+      })
+      .join('');
+
+    // Render Pickers (Welcome Card, Settings Drawer, and Modal)
+    renderDogPickerGrid(heroDogPicker, false);
+    renderDogPickerGrid(settingsDogPicker, true);
+    renderModalProfiles();
+
+    // Refresh headline/subtext for current state
+    applyDogVisualState(state.dogState);
+  }
+
+  function renderDogPickerGrid(container, isCompact) {
+    const isOnlyOneLeft = state.selectedDogs.length === 1;
+    container.innerHTML = DOG_ORDER.map((id) => {
+      const dog = DOGS[id];
+      const selected = state.selectedDogs.includes(id);
+      const badgeText = selected ? '✓ In Class' : '+ Add';
+      return `
+        <button type="button"
+                class="dog-choice-btn ${selected ? 'selected' : ''}"
+                data-dog-pick="${dog.id}"
+                aria-pressed="${selected}"
+                title="${selected && isOnlyOneLeft ? 'At least one dog must stay in class' : 'Toggle ' + dog.name}">
+          <img src="${dog.photo}" alt="${dog.name}" />
+          <div class="dog-choice-info">
+            <span class="dog-choice-name">${dog.name}</span>
+            <span class="dog-choice-badge">${badgeText}</span>
+          </div>
+        </button>`;
+    }).join('');
+
+    container.querySelectorAll('[data-dog-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => toggleDogSelection(btn.dataset.dogPick));
+    });
+  }
+
+  function renderModalProfiles() {
+    modalDogProfiles.innerHTML = DOG_ORDER.map((id, i) => {
+      const dog = DOGS[id];
+      const selected = state.selectedDogs.includes(id);
+      return `
+        <div class="dog-profile-card">
+          <div class="polaroid-large tilt-${i}">
+            <img src="${dog.photo}" alt="Real photo of ${dog.name}" />
+          </div>
+          <h3>${dog.name}</h3>
+          <p>${dog.bio}</p>
+          <button type="button"
+                  class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-sm"
+                  data-modal-dog="${dog.id}">
+            ${selected ? '✓ Napping in Class Today' : '+ Invite ' + dog.name + ' Today'}
+          </button>
+        </div>`;
+    }).join('');
+
+    modalDogProfiles.querySelectorAll('[data-modal-dog]').forEach((btn) => {
+      btn.addEventListener('click', () => toggleDogSelection(btn.dataset.modalDog));
+    });
+  }
+
+  // --- Hide / Show Noise Meter ---
+  function setMeterHidden(hidden) {
+    state.hideMeter = Boolean(hidden);
+    body.setAttribute('data-meter-hidden', String(state.hideMeter));
+
+    heroHideMeterCheck.checked = state.hideMeter;
+    settingsHideMeterCheck.checked = state.hideMeter;
+
+    if (state.hideMeter) {
+      meterVisIcon.textContent = '📊';
+      meterVisLabel.textContent = 'Show Meter';
+      meterVisibilityBtn.classList.add('active-pill');
+      meterVisibilityBtn.title = 'Noise Meter is hidden from children — click to show it';
+    } else {
+      meterVisIcon.textContent = '🙈';
+      meterVisLabel.textContent = 'Hide Meter';
+      meterVisibilityBtn.classList.remove('active-pill');
+      meterVisibilityBtn.title = 'Hide the Noise Meter so children cannot see it';
+    }
+
+    savePrefs();
+  }
+
+  // --- Initialize UI ---
   function initUI() {
+    setMeterHidden(state.hideMeter);
     updateThresholdUI(state.threshold);
     sensitivitySlider.value = String(state.sensitivity);
     updateSensitivityLabel();
     holdTimeSelect.value = String(state.holdDurationMs);
     alertSoundSelect.value = state.alertSound;
     renderStats();
+    renderAllDogUI();
   }
 
   function ensureAudioContext() {
@@ -141,7 +381,6 @@
     try {
       ensureAudioContext();
 
-      // Disable browser autoGainControl & noiseSuppression so classroom ambient noise is measured accurately
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -182,7 +421,7 @@
       alert(
         'Could not access the microphone (' +
           (err.message || 'Permission denied') +
-          '). Switching to Demo Slider mode so you can still try Ruffles & Wispa!'
+          '). Switching to Demo Slider mode so you can still preview the classroom dogs!'
       );
       startDemoMode();
     }
@@ -195,6 +434,10 @@
     state.isRunning = true;
     toggleDemoMode.checked = true;
     demoBox.hidden = false;
+    // Unhide meter if user explicitly clicks Demo Slider so they can drag the slider!
+    if (state.hideMeter) {
+      setMeterHidden(false);
+    }
     startOverlay.hidden = true;
 
     micToggleBtn.classList.add('listening');
@@ -240,7 +483,6 @@
     }
     if (!analyser || !sampleBuffer) return 0;
 
-    // Ignore speaker feedback while our own alert sound is playing
     if (now < state.alertPlaybackGuardUntil) {
       return state.currentVolume * 0.85;
     }
@@ -253,7 +495,6 @@
     }
     const rms = Math.sqrt(sumSquares / sampleBuffer.length) * state.sensitivity;
 
-    // Convert RMS to decibels: map [-56 dB .. -8 dB] -> [0% .. 100%]
     const db = 20 * Math.log10(Math.max(rms, 1e-6));
     const minDb = -56;
     const maxDb = -8;
@@ -268,8 +509,6 @@
     lastFrameTime = now;
 
     const rawLevel = readMicPercent(now);
-
-    // Smooth ballistics: snappy rise, gentle decay
     const alpha = rawLevel > state.currentVolume ? 0.32 : 0.11;
     state.currentVolume = state.currentVolume + (rawLevel - state.currentVolume) * alpha;
 
@@ -277,9 +516,7 @@
     const threshold = state.threshold;
     const stirLine = threshold * 0.76;
 
-    // Accumulate or decay sustained loud noise
     if (vol >= threshold) {
-      // Extra loud noise fills the wake bar slightly faster
       const excessBoost = 1 + Math.min(1.0, (vol - threshold) / 30);
       state.overThresholdMs = Math.min(
         state.holdDurationMs,
@@ -289,12 +526,9 @@
       state.overThresholdMs = Math.max(0, state.overThresholdMs - dt * 1.35);
     }
 
-    // State Machine Transitions
     if (state.dogState === 'awake') {
-      // If still noisy, keep extending awake hold slightly
       if (vol >= threshold * 0.92) {
         state.awakeHoldUntil = Math.max(state.awakeHoldUntil, now + 2600);
-        // Re-bark if they stay loud for > 8 seconds straight
         if (now - state.lastAlertPlayedAt > 8500) {
           triggerAlertSound(now);
         }
@@ -312,7 +546,6 @@
       }
     }
 
-    // Track Quiet Time & Dream Treats (1 treat every 120s of quiet/sleeping)
     if (state.dogState === 'sleeping') {
       state.quietAccumMs += dt;
       if (state.quietAccumMs >= 1000) {
@@ -356,22 +589,33 @@
     imgStirring.classList.toggle('active', s === 'stirring');
     imgAwake.classList.toggle('active', s === 'awake');
 
+    const activeDogs = getActiveDogs();
+    const names = formatDogNames(activeDogs);
+    const isPlural = activeDogs.length > 1;
+    const beVerb = isPlural ? 'are' : 'is';
+    const whoNoun = isPlural ? 'the dogs' : activeDogs[0].name;
+    const pronoun = isPlural ? 'they' : activeDogs[0].pronoun;
+
     if (s === 'sleeping') {
-      statusHeadline.textContent = 'Shhh… Ruffles & Wispa are fast asleep!';
-      statusSubtext.textContent = 'Keep our classroom voices calm so the puppies can dream.';
-      rufflesStatus.textContent = '💤 Dreaming';
-      wispaStatus.textContent = '💤 Snoozing';
+      statusHeadline.textContent = `Shhh… ${names} ${beVerb} fast asleep!`;
+      statusSubtext.textContent = `Keep our classroom voices calm so ${whoNoun} can dream.`;
     } else if (s === 'stirring') {
-      statusHeadline.textContent = 'Careful… Ruffles & Wispa are starting to stir!';
+      statusHeadline.textContent = `Careful… ${names} ${beVerb} starting to stir!`;
       statusSubtext.textContent = 'Voices are getting louder — let’s bring the volume gently down.';
-      rufflesStatus.textContent = '👂 Ears Perked';
-      wispaStatus.textContent = '👀 Peeking';
     } else if (s === 'awake') {
-      statusHeadline.textContent = 'Uh oh! Too Noisy — Ruffles & Wispa Woke Up!';
-      statusSubtext.textContent = 'Let’s quiet our voices right down so the puppies can go back to sleep.';
-      rufflesStatus.textContent = '🐶 WOOF! Awake!';
-      wispaStatus.textContent = '🐶 ARF! Awake!';
+      statusHeadline.textContent = `Uh oh! Too Noisy — ${names} Woke Up!`;
+      statusSubtext.textContent = `Let’s quiet our voices right down so ${whoNoun} can go back to sleep.`;
     }
+
+    noisyBannerSubtext.textContent = `You woke up ${names} — let's whisper so ${pronoun} can sleep again!`;
+
+    // Update each dog's bottom status pill
+    activeDogs.forEach((dog) => {
+      const pill = dogNametagsRow.querySelector(`[data-dog-status="${dog.id}"]`);
+      if (!pill) return;
+      pill.textContent =
+        s === 'awake' ? dog.awakeStatus : s === 'stirring' ? dog.stirStatus : dog.sleepStatus;
+    });
   }
 
   function updateMeterVisuals(vol) {
@@ -392,7 +636,6 @@
     thresholdSlider.value = String(clamped);
     thresholdSliderLabel.textContent = clamped + '%';
 
-    // Update colored background zones inside thermometer
     const stir = Math.round(clamped * 0.76);
     meterZoneBg.style.background = `linear-gradient(to top,
       #22c55e 0%,
@@ -402,7 +645,6 @@
       #ef4444 ${clamped}%,
       #ef4444 100%)`;
 
-    // Highlight matching preset chip if any
     presetChips.forEach((chip) => {
       chip.classList.toggle('active', Number(chip.dataset.threshold) === clamped);
     });
@@ -425,17 +667,21 @@
     if (mode === 'silent') return;
 
     ensureAudioContext();
-    state.alertPlaybackGuardUntil = now + 2200;
+    const activeDogs = getActiveDogs();
+    state.alertPlaybackGuardUntil = now + 2600;
 
     if (mode === 'bark-chime') {
       playClassroomChime(0);
-      playPuppyBark(0.35, 1.0); // Ruffles bark
-      playPuppyBark(0.68, 1.24); // Wispa higher-pitched puppy yip!
+      activeDogs.forEach((dog, i) => {
+        playPuppyBark(0.34 + i * 0.28, dog.barkPitch);
+      });
     } else if (mode === 'voice-bark') {
-      playPuppyBark(0, 1.05);
-      playPuppyBark(0.28, 1.28);
-      state.alertPlaybackGuardUntil = now + 4200;
-      setTimeout(() => speakAlertPhrase(), 520);
+      activeDogs.forEach((dog, i) => {
+        playPuppyBark(i * 0.25, dog.barkPitch);
+      });
+      state.alertPlaybackGuardUntil = now + 4600;
+      const delayMs = 280 + activeDogs.length * 240;
+      setTimeout(() => speakAlertPhrase(activeDogs), delayMs);
     } else if (mode === 'bell') {
       playClassroomChime(0);
     } else if (mode === 'shush') {
@@ -444,12 +690,10 @@
     }
   }
 
-  // Friendly synthesized puppy bark ("Woof! Arf!")
   function playPuppyBark(delaySec = 0, pitchMult = 1.0) {
     const ctx = ensureAudioContext();
     const t0 = ctx.currentTime + delaySec;
 
-    // Vocal cord pitch contour (quick rise then drop)
     const osc = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
     const formant = ctx.createBiquadFilter();
@@ -476,7 +720,6 @@
     gain.gain.linearRampToValueAtTime(0.42, t0 + 0.025);
     gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.21);
 
-    // Add brief breathy "ruff" burst
     const noiseLen = Math.floor(ctx.sampleRate * 0.16);
     const noiseBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
     const data = noiseBuf.getChannelData(0);
@@ -490,7 +733,7 @@
 
     osc.connect(formant);
     osc2.connect(formant);
-    noise.connect( noiseGain );
+    noise.connect(noiseGain);
     noiseGain.connect(formant);
     formant.connect(gain);
     gain.connect(ctx.destination);
@@ -502,10 +745,9 @@
     osc2.stop(t0 + 0.22);
   }
 
-  // Warm two-note teacher attention desk chime
   function playClassroomChime(delaySec = 0) {
     const ctx = ensureAudioContext();
-    const notes = [659.25, 880.0]; // E5 -> A5
+    const notes = [659.25, 880.0];
 
     notes.forEach((freq, idx) => {
       const t = ctx.currentTime + delaySec + idx * 0.18;
@@ -538,7 +780,6 @@
     });
   }
 
-  // Gentle breathy "Shhhhh..." sound
   function playShushSound(delaySec = 0) {
     const ctx = ensureAudioContext();
     const t0 = ctx.currentTime + delaySec;
@@ -569,12 +810,16 @@
     src.start(t0);
   }
 
-  function speakAlertPhrase() {
+  function speakAlertPhrase(activeDogs) {
     if (!('speechSynthesis' in window)) return;
     try {
       window.speechSynthesis.cancel();
+      const spokenNames = activeDogs
+        .map((d) => d.name)
+        .join(activeDogs.length === 2 ? ' and ' : ', ')
+        .replace(/, ([^,]*)$/, ', and $1');
       const msg = new SpeechSynthesisUtterance(
-        'Uh oh! Too noisy! You woke up Ruffles and Wispa. Let us use quiet voices.'
+        `Uh oh! Too noisy! You woke up ${spokenNames}. Let us use quiet voices.`
       );
       msg.rate = 0.98;
       msg.pitch = 1.08;
@@ -616,7 +861,15 @@
     }
   });
 
-  // Preset Chips
+  // Hide / Show Noise Meter Controls
+  meterVisibilityBtn.addEventListener('click', () => setMeterHidden(!state.hideMeter));
+  quickHideMeterBtn.addEventListener('click', () => setMeterHidden(true));
+  heroHideMeterCheck.addEventListener('change', () => setMeterHidden(heroHideMeterCheck.checked));
+  settingsHideMeterCheck.addEventListener('change', () =>
+    setMeterHidden(settingsHideMeterCheck.checked)
+  );
+
+  // Preset Chips (both on Meter and in Settings)
   presetChips.forEach((chip) => {
     chip.addEventListener('click', () => {
       updateThresholdUI(Number(chip.dataset.threshold));
@@ -682,7 +935,6 @@
   alertSoundSelect.addEventListener('change', () => {
     state.alertSound = alertSoundSelect.value;
     savePrefs();
-    // Play a quick preview when changing sound
     triggerAlertSound(performance.now());
   });
 
@@ -697,8 +949,7 @@
     }
   });
 
-  // Test Wake-Up Button (lets teacher show the class what happens!)
-  testAlertBtn.addEventListener('click', () => {
+  function runTestWakeup() {
     startOverlay.hidden = true;
     const now = performance.now();
     state.dogState = 'awake';
@@ -717,15 +968,20 @@
         }
       }, 4200);
     }
-  });
+  }
 
-  resetStatsBtn.addEventListener('click', () => {
+  function resetAllStats() {
     state.quietSeconds = 0;
     state.quietAccumMs = 0;
     state.treatsEarned = 0;
     state.wakeupsCount = 0;
     renderStats();
-  });
+  }
+
+  testAlertBtn.addEventListener('click', runTestWakeup);
+  settingsTestAlertBtn.addEventListener('click', runTestWakeup);
+  resetStatsBtn.addEventListener('click', resetAllStats);
+  settingsResetBtn.addEventListener('click', resetAllStats);
 
   // Settings Drawer Toggle
   settingsToggleBtn.addEventListener('click', () => {
@@ -742,7 +998,6 @@
     settingsToggleBtn.setAttribute('aria-expanded', 'false');
   });
 
-  // Fullscreen Whiteboard Button
   fullscreenBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.().catch(() => {});
@@ -751,7 +1006,6 @@
     }
   });
 
-  // Real Photos Modal ("Meet Ruffles & Wispa")
   meetDogsBtn.addEventListener('click', () => {
     photoModal.hidden = false;
   });
